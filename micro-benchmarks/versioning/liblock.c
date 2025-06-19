@@ -91,7 +91,8 @@ void* anon_mmap_huge(size_t n) {
 
 void liblock_bind_mem(void* area, size_t n, struct core_node* node) {
 	unsigned long mask = 1 << node->node_id;
-
+    printf("Binding %p to node %d with mask %lx\n", area, node->node_id, mask);
+    fflush(stdout); 
 	if(topology->nb_nodes > 1)
 		if(mbind(area, n, MPOL_BIND, &mask, 1 + topology->nb_nodes, MPOL_MF_MOVE) < 0)
 			fatal("mbind: %s", strerror(errno));

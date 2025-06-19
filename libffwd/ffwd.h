@@ -9,22 +9,23 @@
 #define MAX_NUM_OF_SERVERS 4
 #define THREADS_PER_RESPONSE NCLIENTS 
 #define INDEX_DIFF 2
+//原子增加一个变量的值
 #define ATOMIC_INC __asm__ __volatile__ ("lock xaddl %0, %1 \n\t" \
 			 					: "=r" (val), "=m" (atomic_variable) \
              					: "0" (val), "m" (atomic_variable) \
               					: "memory"); \
-
+//服务器返回的结果                             
 struct server_response
 {
 	uint64_t return_values[THREADS_PER_RESPONSE];
 	uint64_t flags;
 
 } __attribute__((packed));
-
+//服务器端写回结果与标志位
 struct server_set{
 	struct server_response* server_responses[MAX_SOCK * 4];
 };
-
+//客户端请求结构体
 struct request{
 	uint64_t flag;
 	uint32_t argc;
@@ -32,7 +33,7 @@ struct request{
 	uint64_t argv[5];
 	char make_it_64_bytes[4];
 } __attribute__((packed));
-
+//每个线程（客户端）私有的上下文
 struct ffwd_context {
 	int id;
 	int dead;
@@ -44,7 +45,7 @@ struct ffwd_context {
 	struct request* request[MAX_NUM_OF_SERVERS];
 	volatile struct server_response* server_response[MAX_NUM_OF_SERVERS];
 };
-
+//每个服务器的参数
 struct server_args{
 	int server_core;
 	struct request* chip0;
@@ -53,7 +54,7 @@ struct server_args{
 	struct request* chip3;
 	struct server_set* server_response;
 };
-
+//检查某个客户端是否有新请求，如果有，就调用客户端指定的函数
 #define SERVER_CODE_IMP(id_in_chip, request, socket_id, flag_id) \
 		if(((old_client_flags##socket_id ) ^ (request[id_in_chip].flag)) & ((uint64_t)1 << id_in_chip)){ \
 		__asm__ __volatile__ (	"movq 	%4, %%r8 \n\t" \
@@ -79,6 +80,7 @@ struct server_args{
 								: "memory", "rax", "rdi", "rsi", "r8", "r9", "r10", "r11", "rcx", "rdx"); \
 } \
 
+//用于列出所有 NUMA 节点中可用的物理 CPU ID 列表。
 #define READ_SPEC \
 	"NODES=/sys/devices/system/node; \
 	for F in `ls -d $NODES/node*`; do \
@@ -86,7 +88,8 @@ struct server_args{
 			seq -w -s ' ' $(echo $i | tr -s '-' ' '); \
 		done; \
 	done;"
-
+    
+//检测当前机器是 AMD Opteron 还是 Intel Xeon 平台
 #define FIND_PLATFORM \
 	"if cat /proc/cpuinfo | grep -q 'Opteron' ; then \
 		echo Opteron; \
@@ -100,6 +103,8 @@ struct server_args{
 
 extern inline void prepare_request(struct request* myrequest, int arg_count, ...);
 
+
+//客户端用这个宏把函数委托给服务器执行，并等待结果。
 #define FFWD_EXEC(server_no, function, ret, ...) \
  	context->request[server_no]->fptr = function; \
  	prepare_request(context->request[server_no], __VA_ARGS__); \

@@ -34,6 +34,7 @@ volatile int finished3[32] __attribute__((aligned(128))) = {0};
 volatile int finished4[32] __attribute__((aligned(128))) = {0};
 pthread_t server_thread[MAX_NUM_OF_SERVERS];
 
+//把当前线程绑定到指定的 CPU 核心。
 void move_to_core(int core_id){
 	int num_cpu = numa_num_configured_cpus();
 	struct bitmask * cpumask = numa_bitmask_alloc(num_cpu);
@@ -41,6 +42,7 @@ void move_to_core(int core_id){
 	numa_sched_setaffinity(0, cpumask);
 }
 
+//填充客户端的请求结构体，设置参数个数和参数值。
 inline void prepare_request(struct request* myrequest, int arg_count, ...){
 	va_list args;
     va_start(args, arg_count);
@@ -53,11 +55,13 @@ inline void prepare_request(struct request* myrequest, int arg_count, ...){
 
     va_end(args);
 }
-
+//获取当前线程的私有上下文（ffwd_context）。
 struct ffwd_context* ffwd_get_context() {
 	return pthread_getspecific(thr_context_key);
 }
 
+
+//服务器线程的主循环，轮询客户端请求，执行函数并返回结果
 void* server_func(void* input){
 	struct server_args* this_server = (struct server_args*) input;
 
@@ -157,14 +161,14 @@ void* server_func(void* input){
 	return 0;
 
 }
-
+//创建一个新线程，运行指定的函数
 pthread_t * create_thread(void *(* func) (void *)){
 	pthread_t * thread = malloc(sizeof(pthread_t));
 	pthread_create(thread, 0, func, &global_id);
 
 	return thread;
 }
-
+//客户端线程的入口函数，初始化线程并运行用户指定的任务。
 void* ffwd_client_start(void* param) {
 	struct ffwd_context *context = param;
 	move_to_core(context->id);
@@ -174,7 +178,7 @@ void* ffwd_client_start(void* param) {
 
 	return retval;
 }
-
+//创建客户端线程，初始化上下文并启动线程。
 void ffwd_thread_create(pthread_t *thread, pthread_attr_t *client_attr, void *(* func) (void *), void* value){
 	struct ffwd_context *context = malloc(sizeof(struct ffwd_context));
 	int id_in_chip = 0;
@@ -241,6 +245,7 @@ void ffwd_thread_create(pthread_t *thread, pthread_attr_t *client_attr, void *(*
 
 }
 
+//将主线程绑定到特定核心并初始化上下文，使其可以像客户端线程一样使用 ffwd。
 void ffwd_bind_main_thread(){
 	struct ffwd_context *context = malloc(sizeof(struct ffwd_context));
 	int id_in_chip = 0;
@@ -309,7 +314,7 @@ void ffwd_bind_main_thread(){
 	pthread_setspecific(thr_context_key, context);
 
 }
-
+//关闭 ffwd 系统，停止服务器线程并释放内存。
 void ffwd_shutdown() {
 	finished[0]=1;
 	finished2[0]=1;
@@ -329,7 +334,7 @@ void ffwd_shutdown() {
 		numa_free(server_arg[num_of_server_launched], sizeof(struct server_args));
 	}
 }
-
+//初始化核心分配，检测系统硬件配置（CPU 平台、socket 数、核心数）。
 static void initialize_core_ordering(){
     FILE *file;
 	char  text[1024], *p, *saveptr;
@@ -385,10 +390,10 @@ static void initialize_core_ordering(){
 	num_threads = all_threads;
 	active_threads_per_socket -= (active_threads_per_socket/cores_per_socket);
 
-	// printf("Running on %s with %d sockets and %d threads\n", platform, num_sockets, num_threads);
+printf("Running on %s with %d sockets and %d threads\n", platform, num_sockets, num_threads);
 
 }
-
+//初始化 ffwd 系统，检查 NUMA 支持并设置核心分配和线程本地存储。
 void ffwd_init() {
 	if(numa_available() < 0){
 		printf("System does not support NUMA API!\n");
@@ -399,7 +404,7 @@ void ffwd_init() {
 	pthread_key_create(&thr_context_key, NULL);
 }
 
-//launches upto 4 servers on the first core of each socket
+//launches upto 4 servers on the first core of each socket启动指定数量的服务器线程（最多 4 个），为每个服务器分配内存和通信数据。
 void launch_servers(int num_of_servers){
 	int i, s, server_core, server_numa_node;
 
